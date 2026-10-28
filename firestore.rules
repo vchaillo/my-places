@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    match /shares/{shareId} {
+      allow read: if request.auth != null &&
+        (resource.data.ownerId == request.auth.uid || resource.data.recipientId == request.auth.uid);
+      allow create: if request.auth != null &&
+        request.resource.data.keys().hasOnly(['ownerId','recipientId','title','places','createdAt']) &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.recipientId is string &&
+        request.resource.data.recipientId != request.auth.uid &&
+        request.resource.data.title is string && request.resource.data.places is list &&
+        request.resource.data.places.size() <= 200 &&
+        request.resource.data.createdAt == request.time;
+      allow delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
+      allow update: if false;
+    }
+  }
+}
