@@ -9,7 +9,7 @@ function notify(message){$('toast').textContent=message;$('toast').hidden=false;
 let demo=false;const allPlaces=()=>demo?[...state.places,...window.demoPlaces]:state.places;
 const $=id=>document.getElementById(id);
 const map=L.map('map',{zoomControl:false}).setView([48.8566,2.3522],12);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© OpenStreetMap contributors © CARTO',maxZoom:19}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
 L.control.zoom({position:'bottomright'}).addTo(map);
 const markers=L.layerGroup().addTo(map);let editing=null;let view='map';
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -32,7 +32,7 @@ let searchController;
 async function searchLocations(){
  const query=$('placeLookup').value.trim();if(query.length<3){notify('Saisissez au moins 3 caractères.');return}
  searchController?.abort();searchController=new AbortController();$('lookupButton').disabled=true;$('lookupResults').textContent='Recherche en cours…';
- try{const response=await fetch('https://data.geopf.fr/geocodage/search?limit=6&q='+encodeURIComponent(query),{signal:searchController.signal});if(!response.ok)throw Error();const data=await response.json();$('lookupResults').replaceChildren();
+ try{const response=await fetch('https://data.geopf.fr/geocodage/search?index=address&index=poi&limit=6&q='+encodeURIComponent(query),{signal:searchController.signal});if(!response.ok)throw Error();const data=await response.json();$('lookupResults').replaceChildren();
  if(!data.features?.length){$('lookupResults').textContent='Aucun résultat. Essayez en ajoutant la ville.';return}
  data.features.forEach(feature=>{const props=feature.properties;const label=props.label||props.name||props.toponym||query;const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=()=>{const form=$('placeForm').elements;form.address.value=label;if(!form.name.value)form.name.value=props.name||props.toponym||label;form.lng.value=feature.geometry.coordinates[0];form.lat.value=feature.geometry.coordinates[1];$('lookupResults').textContent='✓ Position sélectionnée';map.setView([form.lat.value,form.lng.value],16)};$('lookupResults').append(button)})
  }catch(error){if(error.name!=='AbortError')$('lookupResults').textContent='Recherche indisponible. Réessayez ou indiquez les coordonnées.'}finally{$('lookupButton').disabled=false}
