@@ -8,7 +8,7 @@ export function setupCustomization({map, getState, save, render, notify}) {
   preferences = {mode:'dark',brightness:85,saturation:40,hue:180,contrast:100,...preferences};
   const settings = document.createElement('details'); settings.className='map-settings';
   settings.innerHTML='<summary>◐ Style de carte</summary><div class="map-settings-body"><label>Fond de carte<select id="mapMode"><option value="dark">Plan sombre</option><option value="light">Plan classique</option><option value="satellite">Satellite · Esri</option></select></label><label>Luminosité <output id="brightnessValue"></output><input id="brightness" type="range" min="40" max="150"></label><label>Saturation <output id="saturationValue"></output><input id="saturation" type="range" min="0" max="200"></label><label>Teinte <output id="hueValue"></output><input id="hue" type="range" min="0" max="360"></label><label>Contraste <output id="contrastValue"></output><input id="contrast" type="range" min="50" max="160"></label><button id="resetMap">Réinitialiser ce style</button><small>Réglages visuels du fond uniquement. Vos marqueurs restent inchangés.</small><p id="tileStatus" role="status"></p></div>';
-  document.querySelector('main').append(settings);
+  settings.hidden=true;document.querySelector('main').append(settings);
   L.DomEvent.disableClickPropagation(settings); L.DomEvent.disableScrollPropagation(settings);
   let layer;
   function apply(replace=false) {

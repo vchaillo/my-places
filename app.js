@@ -1,5 +1,6 @@
-import { setupCustomization, categorySVG } from './customize.js?v=20261029-collections';
-import { cloud } from './firebase.js?v=20261029-collections';
+import {protectDialog} from './ui.js?v=20261029-profile';
+import { setupCustomization, categorySVG } from './customize.js?v=20261029-profile';
+import { cloud } from './firebase.js?v=20261029-profile';
 /* My Places MVP — browser storage adapter, replaceable by Firestore later. */
 const KEY='my-places-v1';
 const defaultCategories=['Restaurants','Glaciers','Bars','Cafés','Nature','Culture','Autres'];
@@ -25,11 +26,10 @@ function openEditor(id=null,coords=null){editing=id?.startsWith('demo-')?null:id
 $('placeForm').addEventListener('submit',event=>{event.preventDefault();const data=Object.fromEntries(new FormData(event.target));const lat=Number(data.lat),lng=Number(data.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180){alert('Coordonnées invalides');return}const place={...data,lat,lng,id:editing||crypto.randomUUID()};if(editing)state.places=state.places.map(p=>p.id===editing?place:p);else state.places.push(place);save();$('editor').close();render();map.setView([lat,lng],14)});
 $('geocode').onclick=()=>{$('placeLookup').value=$('placeForm').elements.address.value;searchLocations()};
 $('deletePlace').addEventListener('click',()=>{if(!editing||!confirm('Supprimer ce lieu ?'))return;state.places=state.places.filter(p=>p.id!==editing);save();$('editor').close();render()});
-$('closeDialog').onclick=()=>$('editor').close();$('addPlace').onclick=()=>openEditor();
+$('closeDialog').onclick=()=>$('editor').requestCloseSafely();$('addPlace').onclick=()=>openEditor();
 $('placesList').addEventListener('click',event=>{const button=event.target.closest('[data-id]');if(!button)return;const p=allPlaces().find(p=>p.id===button.dataset.id);if(!p)return;setView('map');map.setView([p.lat,p.lng],16);openEditor(p.id)});
 $('panel').addEventListener('click',event=>{const filter=event.target.closest('[data-filter]');if(filter){setView('places');$('categoryFilter').value=filter.dataset.filter;render()}const edit=event.target.closest('[data-edit]');if(edit)openEditor(edit.dataset.edit);if(false){const name=prompt('Nom de la nouvelle catégorie :')?.trim();if(name&&!state.categories.some(c=>c.toLowerCase()===name.toLowerCase())){state.categories.push(name);save();render()}}});
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>setView(b.dataset.view));['search','categoryFilter','statusFilter'].forEach(id=>$(id).addEventListener(id==='search'?'input':'change',render));map.on('contextmenu',event=>openEditor(null,event.latlng));render();
-$('demoToggle').onchange=event=>{demo=event.target.checked;render();if(demo){setView('map');map.setView([48.8566,2.3522],12)}};
 let searchController;
 async function searchLocations(){
  const query=$('placeLookup').value.trim();if(query.length<3){notify('Saisissez au moins 3 caractères.');return}
@@ -48,12 +48,27 @@ $('closeShare').onclick=()=>$('shareDialog').close();
 $('sendShare').onclick=async()=>{if(!cloud.user){$('shareMessage').textContent='La configuration Firebase et une connexion sont nécessaires.';return}const uid=$('recipient').value.trim();if(!uid||uid===cloud.user.uid){$('shareMessage').textContent='Indiquez l’identifiant d’un autre utilisateur.';return}try{await cloud.share(uid,sharing);$('shareMessage').textContent='Partage créé. Le destinataire le retrouvera dans ses collections.'}catch{$('shareMessage').textContent='Partage impossible. Vérifiez la connexion et les règles Firebase.'}};
 $('account').onclick=async()=>{if(!cloud.ready){notify('La connexion sera disponible dès que Firebase sera configuré.');return}try{if(cloud.user)await cloud.logout();else await cloud.login()}catch{notify('Connexion impossible. Vérifiez la configuration Firebase.')}};
 $('googleLogin').onclick=async()=>{if(!cloud.ready){$('authMessage').textContent='Connexion indisponible. Rechargez la page.';return}try{await cloud.login()}catch{$('authMessage').textContent='Connexion annulée ou impossible. Réessayez.'}};
-cloud.start((user,data,error)=>{accountReady=!!user&&!!data;state=data||{places:[],categories:[]};state.places??=[];state.categories??=[];demo=false;$('demoToggle').checked=false;$('app').hidden=!accountReady;$('app').inert=!accountReady;$('authGate').hidden=accountReady;$('authMessage').textContent=error||(user?'Chargement de vos collections…':'Connectez-vous pour retrouver et organiser vos lieux.');$('googleLogin').hidden=!!user&&!error;$('account').textContent='Déconnexion';$('syncStatus').textContent=accountReady?'● Synchronisé':'';$('storageHint').textContent=user?(user.displayName||user.email||'Mon compte'):'';document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());render();if(accountReady)requestAnimationFrame(()=>map.invalidateSize())},items=>{cloud.inbox=items;if(view==='lists')renderLists()}).catch(()=>{$('authMessage').textContent='Connexion indisponible. Rechargez la page.'});
+cloud.start((user,data,error)=>{accountReady=!!user&&!!data;state=data||{places:[],categories:[]};state.places??=[];state.categories??=[];demo=false;$('app').hidden=!accountReady;$('app').inert=!accountReady;$('authGate').hidden=accountReady;$('authMessage').textContent=error||(user?'Chargement de vos collections…':'Connectez-vous pour retrouver et organiser vos lieux.');$('googleLogin').hidden=!!user&&!error;$('account').textContent='Mon profil';$('syncStatus').textContent=accountReady?'● Synchronisé':'';$('storageHint').textContent=user?(user.displayName||user.email||'Mon compte'):'';document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());render();if(accountReady)requestAnimationFrame(()=>map.invalidateSize())},items=>{cloud.inbox=items;if(view==='lists')renderLists()}).catch(()=>{$('authMessage').textContent='Connexion indisponible. Rechargez la page.'});
 
 const originalRenderLists=renderLists;
 renderLists=function(){originalRenderLists();if(cloud.inbox?.length){const heading=document.createElement('h2');heading.textContent='Partagés avec moi';$('panel').append(heading);cloud.inbox.forEach(item=>{const card=document.createElement('div');card.className='panelcard';const title=document.createElement('h3');title.textContent=item.title;card.append(title);item.places.forEach(place=>{const line=document.createElement('p');line.textContent=place.name+' · '+place.address;card.append(line)});const copy=document.createElement('button');copy.textContent='Enregistrer une copie';copy.onclick=()=>{state.places.push(...item.places.map(place=>({...place,id:crypto.randomUUID()})));save();render();notify('Copie enregistrée dans vos lieux.')};card.append(copy);$('panel').append(card)})}};
 
 setupCustomization({map,getState:()=>state,save,render,notify});
 
-import { setupCollections } from './collections.js?v=20261029-collections';
+import { setupCollections } from './collections.js?v=20261029-profile';
 setupCollections({getState:()=>state,save,render,notify,icons:categorySVG});
+
+protectDialog($('editor'));protectDialog($('shareDialog'));
+$('closeShare').onclick=()=>$('shareDialog').requestCloseSafely();
+const statusSelect=$('placeForm').elements.status;statusSelect.hidden=true;
+const statusLabels=document.createElement('div');statusLabels.className='status-labels';
+for(const [value,label] of [['todo','À découvrir'],['done','Visité']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.status=value;button.onclick=()=>{statusSelect.value=value;paintStatus()};statusLabels.append(button)}
+statusSelect.after(statusLabels);function paintStatus(){statusLabels.querySelectorAll('button').forEach(b=>{b.classList.toggle('selected',b.dataset.status===statusSelect.value);b.setAttribute('aria-pressed',b.dataset.status===statusSelect.value)})}
+new MutationObserver(()=>{if($('editor').open)paintStatus()}).observe($('editor'),{attributes:true,attributeFilter:['open']});
+let profileSettings;
+function showProfile(){if(!cloud.user)return;view='profile';$('panel').hidden=false;document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));profileSettings??=document.querySelector('.map-settings');
+const user=cloud.user;$('panel').innerHTML='<h1>Mon profil</h1><p>Votre compte et vos préférences</p><div class="profile-grid"><section class="panelcard"><h2>Compte Google</h2><p id="profileName"></p><p id="profileEmail"></p><p id="profileLogin"></p><small id="profileUid"></small><p><button id="logoutProfile" class="danger">Se déconnecter</button></p></section><section class="panelcard" id="appearance"><h2>Apparence de la carte</h2><p>Ces préférences sont conservées sur cet appareil.</p></section></div>';
+$('profileName').textContent=user.displayName||'Mon compte';$('profileEmail').textContent=user.email||'';$('profileLogin').textContent='Dernière connexion : '+(user.metadata?.lastSignInTime?new Date(user.metadata.lastSignInTime).toLocaleString('fr-FR'):'Non disponible');$('profileUid').textContent='Identifiant : '+user.uid;
+if(profileSettings){profileSettings.hidden=false;profileSettings.open=true;$('appearance').append(profileSettings)}$('logoutProfile').onclick=async()=>{try{await cloud.logout()}catch{notify('Déconnexion impossible. Réessayez.')}};
+}
+$('account').onclick=showProfile;
