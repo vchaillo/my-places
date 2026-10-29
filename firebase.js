@@ -24,10 +24,10 @@ export const cloud = {
       stopData(); stopInbox(); this.user = user; this.inbox = []; onInbox([]);
       if (!user) { onState(null, null); return; }
       // Never mix local guest data or demo fixtures into a signed-in account.
-      onState(user, { places: [], categories: ['Restaurants','Glaciers','Bars','Cafés','Nature','Culture','Autres'] });
+      onState(user, null);
       stopData = db.onSnapshot(db.doc(firestore, 'apps', 'my-places', 'users', user.uid), snapshot => {
-        onState(user, snapshot.exists() ? snapshot.data() : { places: [], categories: ['Restaurants','Glaciers','Bars','Cafés','Nature','Culture','Autres'] });
-      }, () => { document.getElementById('syncStatus').textContent = 'Synchronisation indisponible'; });
+        onState(user, snapshot.exists() ? snapshot.data() : { places: [], categories: [] });
+      }, () => { onState(user, null, 'Impossible de charger vos données. Réessayez.'); });
       stopInbox = db.onSnapshot(db.query(db.collection(firestore, 'apps', 'my-places', 'shares'), db.where('recipientId', '==', user.uid)), snapshot => {
         onInbox(snapshot.docs.map(item => ({ id: item.id, ...item.data() })));
       }, () => { document.getElementById('syncStatus').textContent = 'Partages indisponibles'; });
