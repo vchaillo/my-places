@@ -29,7 +29,7 @@ export const cloud = {
     auth.onAuthStateChanged(authentication, user => {
       stopData(); stopInbox(); stopEmail(); this.user = user; this.inbox = []; onInbox([]);
       if (!user) { onState(null, null); return; }
-      if(user.emailVerified&&user.email)db.setDoc(db.doc(firestore,'apps','my-places','directory',user.uid),{email:user.email.toLowerCase()}).catch(()=>{});
+      if(user.emailVerified&&user.email)db.setDoc(db.doc(firestore,'apps','my-places','directory',user.uid),{email:user.email.toLowerCase(),photoURL:user.photoURL||''}).catch(()=>db.setDoc(db.doc(firestore,'apps','my-places','directory',user.uid),{email:user.email.toLowerCase()}).catch(()=>{}));
       // Never mix local guest data or demo fixtures into a signed-in account.
       onState(user, null);
       stopData = db.onSnapshot(db.doc(firestore, 'apps', 'my-places', 'users', user.uid), snapshot => {

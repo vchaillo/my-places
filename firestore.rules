@@ -4,14 +4,15 @@ service cloud.firestore {
     match /apps/my-places/users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-    // Contains only verified email addresses of people who have opened My Places.
+    // Contains verified emails and optional profile photo URLs of people who have opened My Places.
     match /apps/my-places/directory/{userId} {
       allow get: if request.auth != null && request.auth.token.email_verified == true;
       allow list: if request.auth != null && request.auth.token.email_verified == true && request.query.limit <= 10;
       allow create, update: if request.auth != null && request.auth.uid == userId &&
         request.auth.token.email_verified == true &&
-        request.resource.data.keys().hasOnly(['email']) &&
-        request.resource.data.email == request.auth.token.email.lower();
+        request.resource.data.keys().hasOnly(['email','photoURL']) &&
+        request.resource.data.email == request.auth.token.email.lower() &&
+        (!('photoURL' in request.resource.data) || (request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 2048 && (request.resource.data.photoURL == '' || request.resource.data.photoURL.matches('https://.*'))));
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
     match /apps/my-places/shares/{shareId} {

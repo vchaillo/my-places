@@ -1,5 +1,5 @@
 // Use the same pointer and touch sorting behavior for both card grids.
-export const dragIcon='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="8" cy="4" r="1.65"/><circle cx="16" cy="4" r="1.65"/><circle cx="8" cy="12" r="1.65"/><circle cx="16" cy="12" r="1.65"/><circle cx="8" cy="20" r="1.65"/><circle cx="16" cy="20" r="1.65"/></svg>';
+export const dragIcon='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="8" cy="4" r="1.45"/><circle cx="16" cy="4" r="1.45"/><circle cx="8" cy="12" r="1.45"/><circle cx="16" cy="12" r="1.45"/><circle cx="8" cy="20" r="1.45"/><circle cx="16" cy="20" r="1.45"/></svg>';
 export async function enableSorting(grid,onChange,notify){
  if(!grid||grid.sortableReady)return;grid.sortableReady=true;
  try{const {default:Sortable}=await import('https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/modular/sortable.complete.esm.js');if(!grid.isConnected)return;

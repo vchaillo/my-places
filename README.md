@@ -33,7 +33,7 @@ Firebase integration is prepared but must be verified against the configured pro
 
 ### Access management and user lookup
 
-Publish the updated `firestore.rules` in the Firebase console, preserving rules for other applications in the shared project. After signing in with a verified Google email, My Places registers that email under `apps/my-places/directory/{uid}`. Authenticated users can search this app-specific directory (queries limited to ten results); it contains no saved places or account profile data. Existing users appear after opening the updated app.
+Publish the updated `firestore.rules` in the Firebase console, preserving rules for other applications in the shared project. After signing in with a verified Google email, My Places registers that email under `apps/my-places/directory/{uid}`. Authenticated users can search this app-specific directory (queries limited to ten results); it contains the verified email and optional Google profile photo URL, without saved places. Existing users appear after opening the updated app.
 
 Share grants have a stable source ID and a deterministic document ID per sender, source and recipient. Repeated submissions do not create another grant. The share dialog groups legacy duplicate grants by recipient; revoking a row removes every grant in that group. Recipients lose access to the shared selection when its grant is deleted. Copies they previously saved remain their own data.
 
@@ -48,3 +48,10 @@ Received places are projected into the map and place list in read-only mode with
 Copying a collection creates a personal collection, a fresh collection ID, the supplied emoji/color, and new place IDs linked to that collection. Name collisions receive a copy suffix. Repeated imports of the same share are prevented. Existing shares without collection metadata use default styling.
 
 Run adapter and data-model checks with `node --test tests/*.test.mjs`. Publish the updated Firestore rules to allow optional collection metadata in new share grants.
+
+
+### Place details and navigation
+
+Selecting a sidebar place centers its marker and opens the map popup without entering edit mode. Collection symbols appear in sidebar cards, place cards, and map popups. The directions menu uses HTTPS links for Google Maps, Apple Maps, and Waze; the device decides whether to open the installed app or the web page. No location is requested: the selected navigation app chooses the departure point.
+
+The sharing dialog displays account avatars from the app directory, with an initial when no image is available. Publish the updated Firestore rules and reopen the app to register the optional Google photo URL.
