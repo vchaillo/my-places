@@ -30,3 +30,11 @@ Firebase Authentication (Google), Firestore, shared lists, richer search. This M
 The demo switch adds 50 illustrative Paris-region landmarks with approximate coordinates to the visible layer only. Saving a demo landmark creates a personal copy. Address and named-place search uses the IGN Géoplateforme geocoding service (BAN and BD TOPO); coverage varies for business names. Searches are explicitly submitted, not sent on every keystroke. Dark map tiles are supplied by CARTO with OpenStreetMap attribution.
 
 Firebase integration is prepared but must be verified against the configured project and deployed rules. Never put service account keys in this public repository.
+
+### Access management and user lookup
+
+Publish the updated `firestore.rules` in the Firebase console, preserving rules for other applications in the shared project. After signing in with a verified Google email, My Places registers that email under `apps/my-places/directory/{uid}`. Authenticated users can search this app-specific directory (queries limited to ten results); it contains no saved places or account profile data. Existing users appear after opening the updated app.
+
+Share grants have a stable source ID and a deterministic document ID per sender, source and recipient. Repeated submissions do not create another grant. The share dialog groups legacy duplicate grants by recipient; revoking a row removes every grant in that group. Recipients lose access to the shared selection when its grant is deleted. Copies they previously saved remain their own data.
+
+Map settings and zoom controls belong to Explorer. Site accent preferences are device-local. Place ordering is account-backed and reordering a filtered view preserves the positions of hidden places.

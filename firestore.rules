@@ -4,21 +4,34 @@ service cloud.firestore {
     match /apps/my-places/users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+    // Contains only verified email addresses of people who have opened My Places.
+    match /apps/my-places/directory/{userId} {
+      allow get: if request.auth != null && request.auth.token.email_verified == true;
+      allow list: if request.auth != null && request.auth.token.email_verified == true && request.query.limit <= 10;
+      allow create, update: if request.auth != null && request.auth.uid == userId &&
+        request.auth.token.email_verified == true &&
+        request.resource.data.keys().hasOnly(['email']) &&
+        request.resource.data.email == request.auth.token.email.lower();
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
     match /apps/my-places/shares/{shareId} {
       allow read: if request.auth != null &&
         (resource.data.ownerId == request.auth.uid || resource.data.get('recipientId','') == request.auth.uid || (request.auth.token.email_verified == true && resource.data.get('recipientEmail','') == request.auth.token.email.lower()));
       allow create: if request.auth != null &&
-        request.resource.data.keys().hasOnly(['ownerId','recipientEmail','title','places','createdAt']) &&
+        request.resource.data.keys().hasOnly(['ownerId','recipientEmail','title','places','createdAt','sourceId']) &&
         request.resource.data.ownerId == request.auth.uid &&
         request.resource.data.recipientEmail is string &&
         request.auth.token.email_verified == true &&
         request.resource.data.recipientEmail == request.resource.data.recipientEmail.lower() &&
         request.resource.data.recipientEmail != request.auth.token.email.lower() &&
+        request.resource.data.sourceId is string && request.resource.data.sourceId.size() <= 200 &&
         request.resource.data.title is string && request.resource.data.places is list &&
         request.resource.data.places.size() <= 200 &&
         request.resource.data.createdAt == request.time;
       allow delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
-      allow update: if false;
+      allow update: if request.auth != null && resource.data.ownerId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['createdAt']) &&
+        request.resource.data.createdAt == request.time;
     }
   }
 }
