@@ -23,7 +23,7 @@ export const cloud = {
       const existing=await this.listShares(payload);if(existing.some(item=>item.recipientEmail===recipientEmail))return false;
       // A deterministic document ID makes repeated and simultaneous requests idempotent.
       const key=JSON.stringify([this.user.uid,payload.sourceId,recipientEmail]);const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key));const id=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
-      await db.setDoc(db.doc(shares,id),{ownerId:this.user.uid,recipientEmail,sourceId:payload.sourceId,title:payload.title,places:payload.places,createdAt:db.serverTimestamp()});return true;
+      await db.setDoc(db.doc(shares,id),{ownerId:this.user.uid,recipientEmail,sourceId:payload.sourceId,title:payload.title,places:payload.places,...(payload.collection?{collection:payload.collection}:{}),createdAt:db.serverTimestamp()});return true;
     };
     let stopData = () => {}, stopInbox = () => {}, stopEmail = () => {};
     auth.onAuthStateChanged(authentication, user => {

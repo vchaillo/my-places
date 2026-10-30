@@ -38,3 +38,13 @@ Publish the updated `firestore.rules` in the Firebase console, preserving rules 
 Share grants have a stable source ID and a deterministic document ID per sender, source and recipient. Repeated submissions do not create another grant. The share dialog groups legacy duplicate grants by recipient; revoking a row removes every grant in that group. Recipients lose access to the shared selection when its grant is deleted. Copies they previously saved remain their own data.
 
 Map settings and zoom controls belong to Explorer. Site accent preferences are device-local. Place ordering is account-backed and reordering a filtered view preserves the positions of hidden places.
+
+### Multiple collections and received shares
+
+Places accept several collections via checkboxes. Legacy `category` records remain readable; the first membership is retained in `category` for compatibility. Renaming or deleting a collection updates only that membership.
+
+Received places are projected into the map and place list in read-only mode without being saved as personal places. Removing a received item stores a per-account dismissal; it does not delete the sender's data or saved personal copies. Removing an entire share hides all its projected places. Received shares contain the selection captured when it was shared; they do not follow subsequent edits to the owner's original data.
+
+Copying a collection creates a personal collection, a fresh collection ID, the supplied emoji/color, and new place IDs linked to that collection. Name collisions receive a copy suffix. Repeated imports of the same share are prevented. Existing shares without collection metadata use default styling.
+
+Run adapter and data-model checks with `node --test tests/*.test.mjs`. Publish the updated Firestore rules to allow optional collection metadata in new share grants.
