@@ -1,6 +1,6 @@
 // Shared dialog guards compare actual form values rather than input events.
 export function protectDialog(dialog){
- const snapshot=()=>JSON.stringify([...dialog.querySelectorAll('input,select,textarea')].map(el=>[el.name||el.id,el.type==='checkbox'?el.checked:el.value]));let baseline='';
+ const snapshot=()=>JSON.stringify([...dialog.querySelectorAll('input,select,textarea')].filter(el=>!el.hasAttribute('data-ignore-dirty')).map(el=>[el.name||el.id,el.type==='checkbox'?el.checked:el.value]));let baseline='';
  const observer=new MutationObserver(()=>{if(dialog.open)baseline=snapshot()});observer.observe(dialog,{attributes:true,attributeFilter:['open']});
  dialog.requestCloseSafely=()=>{if(snapshot()!==baseline&&!confirm('Des modifications ne sont pas enregistrées. Quitter sans enregistrer ?'))return;dialog.close()};
  dialog.addEventListener('cancel',event=>{event.preventDefault();dialog.requestCloseSafely()});

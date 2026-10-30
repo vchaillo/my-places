@@ -1,46 +1,40 @@
-// Firebase is loaded only after a project configuration has been supplied.
-export const cloud = {
-  ready: false, user: null, inbox: [],
-  async start(onState, onInbox) {
-    if (!window.firebaseConfig?.apiKey) return;
-    const [app, auth, db] = await Promise.all([
-      import('https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js'),
-      import('https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js'),
-      import('https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js')
-    ]);
-    const instance = app.initializeApp(window.firebaseConfig);
-    const authentication = auth.getAuth(instance);
-    const firestore = db.getFirestore(instance);
-    this.ready = true;
-    this.login = () => auth.signInWithPopup(authentication, new auth.GoogleAuthProvider());
-    this.logout = () => auth.signOut(authentication);
-    this.save = data => db.setDoc(db.doc(firestore, 'apps', 'my-places', 'users', this.user.uid), data);
-    const profileCache=new Map();this.getProfile=uid=>{if(!profileCache.has(uid))profileCache.set(uid,db.getDoc(db.doc(firestore,'apps','my-places','directory',uid)).then(snapshot=>snapshot.exists()?snapshot.data():null).catch(error=>{profileCache.delete(uid);throw error}));return profileCache.get(uid)};
-    const shares=db.collection(firestore,'apps','my-places','shares');
-    this.findUsers=async prefix=>{const result=await db.getDocs(db.query(db.collection(firestore,'apps','my-places','directory'),db.orderBy('email'),db.startAt(prefix),db.endAt(prefix+'\uf8ff'),db.limit(10)));return result.docs.map(doc=>doc.data())};
-    this.listShares=async payload=>{const result=await db.getDocs(db.query(shares,db.where('ownerId','==',this.user.uid)));return result.docs.map(doc=>({id:doc.id,...doc.data()})).filter(item=>item.sourceId===payload.sourceId||(!item.sourceId&&item.title===payload.title&&((payload.sourceId.startsWith('place:')&&item.places?.length===1&&item.places[0].id===payload.places[0]?.id)||(payload.sourceId.startsWith('collection:')&&item.places?.every(p=>p.category===payload.title))))) };
-    this.revokeShares=async items=>{await Promise.all(items.map(item=>db.deleteDoc(db.doc(shares,item.id))))};
-    this.share=async(recipientEmail,payload)=>{
-      const existing=await this.listShares(payload);if(existing.some(item=>item.recipientEmail===recipientEmail))return false;
-      // A deterministic document ID makes repeated and simultaneous requests idempotent.
-      const key=JSON.stringify([this.user.uid,payload.sourceId,recipientEmail]);const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key));const id=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
-      await db.setDoc(db.doc(shares,id),{ownerId:this.user.uid,recipientEmail,sourceId:payload.sourceId,title:payload.title,places:payload.places,...(payload.collection?{collection:payload.collection}:{}),createdAt:db.serverTimestamp()});return true;
-    };
-    let stopData = () => {}, stopInbox = () => {}, stopEmail = () => {};
-    auth.onAuthStateChanged(authentication, user => {
-      stopData(); stopInbox(); stopEmail(); profileCache.clear(); this.user = user; this.inbox = []; onInbox([]);
-      if (!user) { onState(null, null); return; }
-      if(user.emailVerified&&user.email)db.setDoc(db.doc(firestore,'apps','my-places','directory',user.uid),{email:user.email.toLowerCase(),photoURL:user.photoURL||''}).catch(()=>db.setDoc(db.doc(firestore,'apps','my-places','directory',user.uid),{email:user.email.toLowerCase()}).catch(()=>{}));
-      // Never mix local guest data or demo fixtures into a signed-in account.
-      onState(user, null);
-      stopData = db.onSnapshot(db.doc(firestore, 'apps', 'my-places', 'users', user.uid), snapshot => {
-        onState(user, snapshot.exists() ? snapshot.data() : { places: [], categories: [] });
-      }, () => { onState(user, null, 'Impossible de charger vos données. Réessayez.'); });
-      const buckets={legacy:[],email:[]};const publish=()=>onInbox([...buckets.legacy,...buckets.email]);
-      if(user.emailVerified&&user.email)stopEmail=db.onSnapshot(db.query(db.collection(firestore,'apps','my-places','shares'),db.where('recipientEmail','==',user.email.toLowerCase())),snapshot=>{buckets.email=snapshot.docs.map(item=>({id:item.id,...item.data()}));publish()},()=>{document.getElementById('syncStatus').textContent='Règles de partage à mettre à jour';});
-      stopInbox = db.onSnapshot(db.query(db.collection(firestore, 'apps', 'my-places', 'shares'), db.where('recipientId', '==', user.uid)), snapshot => {
-        buckets.legacy=snapshot.docs.map(item => ({ id: item.id, ...item.data() }));publish();
-      }, () => { document.getElementById('syncStatus').textContent = 'Partages indisponibles'; });
-    });
-  }
+import {cleanPlace,hydrateOwned,resourcePayload,resourceDiff,hasChanges,applyResourcePatch,canEditShare} from './collaboration-model.js?v=20261030-live';
+const clone=value=>JSON.parse(JSON.stringify(value));
+export const cloud={ready:false,user:null,inbox:[],
+ async start(onState,onInbox){
+  if(!window.firebaseConfig?.apiKey)return;
+  const [app,auth,db]=await Promise.all([import('https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js'),import('https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js'),import('https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js')]);
+  const firestore=db.getFirestore(app.initializeApp(window.firebaseConfig)),authentication=auth.getAuth();const root=['apps','my-places'];
+  const shares=db.collection(firestore,...root,'shares'),resources=db.collection(firestore,...root,'resources');
+  const profileCache=new Map();let raw=null,delivered=null,owned=[],stops=[],resourceStops=new Map(),received=[],resourceCache=new Map(),saveQueue=Promise.resolve(),generation=0;
+  const errorStatus=message=>{const status=document.getElementById('syncStatus');if(status)status.textContent=message};
+  const emitState=()=>{if(!raw||!this.user)return;delivered=hydrateOwned(raw,owned);onState(this.user,clone(delivered))};
+  const emitInbox=()=>{this.inbox=received.flatMap(grant=>{if(!grant.resourceId)return [grant];const resource=resourceCache.get(grant.resourceId);return resource&&!resource.archived?[{...grant,title:resource.title,collection:resource.collection,places:resource.places,revision:resource.revision}]:[]});onInbox(this.inbox)};
+  const watchResources=()=>{const ids=new Set(received.filter(item=>item.resourceId).map(item=>item.resourceId));for(const [id,stop]of resourceStops)if(!ids.has(id)){stop();resourceStops.delete(id);resourceCache.delete(id)}for(const id of ids)if(!resourceStops.has(id)){const token=generation;resourceStops.set(id,db.onSnapshot(db.doc(resources,id),snapshot=>{if(token!==generation)return;if(snapshot.exists())resourceCache.set(id,snapshot.data());else resourceCache.delete(id);emitInbox()},()=>{if(token!==generation)return;resourceCache.delete(id);resourceStops.delete(id);emitInbox();errorStatus('Un accès partagé a changé.')}))}emitInbox()};
+  this.ready=true;this.login=()=>auth.signInWithPopup(authentication,new auth.GoogleAuthProvider());this.logout=()=>auth.signOut(authentication);
+  this.getProfile=uid=>{if(!profileCache.has(uid))profileCache.set(uid,db.getDoc(db.doc(firestore,...root,'directory',uid)).then(snapshot=>snapshot.exists()?snapshot.data():null).catch(error=>{profileCache.delete(uid);throw error}));return profileCache.get(uid)};
+  this.findUsers=async prefix=>{const result=await db.getDocs(db.query(db.collection(firestore,...root,'directory'),db.orderBy('email'),db.startAt(prefix),db.endAt(prefix+'\uf8ff'),db.limit(10)));return result.docs.map(doc=>({uid:doc.id,...doc.data()}))};
+  this.listShares=async payload=>{const result=await db.getDocs(db.query(shares,db.where('ownerId','==',this.user.uid)));return result.docs.map(doc=>({id:doc.id,...doc.data()})).filter(item=>item.sourceId===payload.sourceId||(!item.sourceId&&item.title===payload.title))};
+  this.save=data=>{const uid=this.user?.uid;if(!uid||!delivered)throw Error('not-ready');const next=clone(data),base=clone(delivered);const patches=owned.map(resource=>({resource,patch:resourceDiff(resourcePayload(base,resource),resourcePayload(next,resource))})).filter(item=>hasChanges(item.patch));const token=generation;
+   const work=async()=>{if(token!==generation)throw Error('account-changed');for(const {resource,patch}of patches){await db.runTransaction(firestore,async transaction=>{const ref=db.doc(resources,resource.id),snapshot=await transaction.get(ref);if(!snapshot.exists())return;const current=snapshot.data();transaction.set(ref,{...applyResourcePatch(current,patch),revision:(current.revision||0)+1,updatedAt:db.serverTimestamp()})})}await db.setDoc(db.doc(firestore,...root,'users',uid),next)};const result=saveQueue.catch(()=>{}).then(work);saveQueue=result;return result};
+  const digest=async value=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),byte=>byte.toString(16).padStart(2,'0')).join('');
+  this.share=async(email,payload,role='read')=>{if(!['read','edit'].includes(role))throw Error('invalid-role');if(!payload.sourceId.startsWith('collection:'))role='read';const profiles=await this.findUsers(email),recipient=profiles.find(profile=>profile.email===email);if(!recipient?.uid||recipient.uid===this.user.uid)throw Error('unknown-user');
+   const existing=await this.listShares(payload);const resourceId=await digest(JSON.stringify([this.user.uid,payload.sourceId]));const ref=db.doc(resources,resourceId);await db.runTransaction(firestore,async transaction=>{const snapshot=await transaction.get(ref);if(!snapshot.exists())transaction.set(ref,{ownerId:this.user.uid,sourceId:payload.sourceId,title:payload.title,collection:payload.collection||{},places:payload.places.map(cleanPlace),archived:false,revision:1,updatedAt:db.serverTimestamp()})});
+   const id=resourceId+'_'+recipient.uid;const match=existing.find(item=>item.id===id&&item.role===role);if(match)return false;
+   const batch=db.writeBatch(firestore);batch.set(db.doc(ref,'members',recipient.uid),{ownerId:this.user.uid,recipientId:recipient.uid,recipientEmail:email,role});batch.set(db.doc(shares,id),{ownerId:this.user.uid,recipientId:recipient.uid,recipientEmail:email,resourceId,sourceId:payload.sourceId,role,title:payload.title,places:[],createdAt:db.serverTimestamp()});for(const item of existing)if(item.recipientEmail===email&&item.id!==id)batch.delete(db.doc(shares,item.id));await batch.commit();return true;
+  };
+  this.upgradeShares=async payload=>{const existing=await this.listShares(payload);for(const item of existing)if(!item.resourceId&&item.recipientEmail)await this.share(item.recipientEmail,payload,'read')};
+  this.changeRole=async(items,role,payload)=>{const email=items[0]?.recipientEmail;if(!email)throw Error('legacy-recipient');await this.share(email,payload,role)};
+  this.revokeShares=async items=>{const batch=db.writeBatch(firestore);for(const item of items){batch.delete(db.doc(shares,item.id));if(item.resourceId&&item.recipientId)batch.delete(db.doc(resources,item.resourceId,'members',item.recipientId))}await batch.commit()};
+  this.updateShared=async(share,changes)=>{if(!canEditShare(share))throw Error('read-only');const ref=db.doc(resources,share.resourceId);await db.runTransaction(firestore,async transaction=>{const snapshot=await transaction.get(ref);if(!snapshot.exists()||snapshot.data().archived)throw Error('unavailable');const current=snapshot.data();let next={...current};if(changes.place){const place=cleanPlace(changes.place);if(changes.basePlace){const baseline=cleanPlace({...changes.basePlace,id:place.id});if(!(current.places||[]).some(item=>item.id===place.id))throw Error('place-removed');next=applyResourcePatch(current,resourceDiff({places:[baseline]},{places:[place]}))}else next.places=(current.places||[]).concat(place)}if(changes.removeId)next.places=(current.places||[]).filter(item=>item.id!==changes.removeId);if(changes.title!==undefined&&changes.title!==changes.base?.title)next.title=changes.title;if(changes.collection!==undefined){const fields=Object.fromEntries(Object.entries(changes.collection).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(changes.base?.collection?.[key])));next.collection={...current.collection,...fields}}if(next.places.length>200)throw Error('too-many-places');transaction.set(ref,{...next,revision:(current.revision||0)+1,updatedAt:db.serverTimestamp()})})};
+  auth.onAuthStateChanged(authentication,user=>{generation++;stops.forEach(stop=>stop());stops=[];for(const stop of resourceStops.values())stop();resourceStops.clear();resourceCache.clear();profileCache.clear();raw=null;delivered=null;owned=[];received=[];this.user=user;this.inbox=[];onInbox([]);onState(user,null);if(!user)return;
+   const token=generation;const current=callback=>(...args)=>{if(token===generation)callback(...args)};
+   if(user.emailVerified&&user.email)db.setDoc(db.doc(firestore,...root,'directory',user.uid),{email:user.email.toLowerCase(),photoURL:user.photoURL||''}).catch(()=>errorStatus('Annuaire indisponible : règles à publier.'));
+   stops.push(db.onSnapshot(db.doc(firestore,...root,'users',user.uid),current(snapshot=>{raw=snapshot.exists()?snapshot.data():{places:[],categories:[]};emitState()}),current(()=>onState(user,null,'Impossible de charger vos données.'))));
+   stops.push(db.onSnapshot(db.query(resources,db.where('ownerId','==',user.uid)),current(snapshot=>{owned=snapshot.docs.map(doc=>({id:doc.id,...doc.data()}));emitState()}),current(()=>errorStatus('Collaboration : règles Firestore à publier.'))));
+   const buckets={uid:[],email:[]};const publish=()=>{received=[...new Map([...buckets.uid,...buckets.email].map(item=>[item.id,item])).values()];watchResources()};
+   stops.push(db.onSnapshot(db.query(shares,db.where('recipientId','==',user.uid)),current(snapshot=>{buckets.uid=snapshot.docs.map(doc=>({id:doc.id,...doc.data()}));publish()}),current(()=>errorStatus('Partages indisponibles.'))));
+   if(user.emailVerified&&user.email)stops.push(db.onSnapshot(db.query(shares,db.where('recipientEmail','==',user.email.toLowerCase())),current(snapshot=>{buckets.email=snapshot.docs.map(doc=>({id:doc.id,...doc.data()}));publish()}),current(()=>errorStatus('Partages : règles à publier.'))));
+  });
+ }
 };

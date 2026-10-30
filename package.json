@@ -1,0 +1,11 @@
+{
+  "name": "my-places",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

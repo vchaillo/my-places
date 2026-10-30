@@ -15,25 +15,78 @@ service cloud.firestore {
         (!('photoURL' in request.resource.data) || (request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 2048 && (request.resource.data.photoURL == '' || request.resource.data.photoURL.matches('https://.*'))));
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
+    function signedIn() { return request.auth != null; }
+    function verified() { return signedIn() && request.auth.token.email_verified == true; }
+    function ownsResource(id) {
+      return signedIn() && get(/databases/$(database)/documents/apps/my-places/resources/$(id)).data.ownerId == request.auth.uid;
+    }
+    function memberRole(id) {
+      return get(/databases/$(database)/documents/apps/my-places/resources/$(id)/members/$(request.auth.uid)).data.role;
+    }
+    function validResource(data) {
+      return data.keys().hasOnly(['ownerId','sourceId','title','collection','places','archived','revision','updatedAt']) &&
+        data.ownerId is string && data.sourceId is string && data.sourceId.size() <= 200 &&
+        data.title is string && data.title.size() > 0 && data.title.size() <= 120 &&
+        data.collection is map && data.collection.keys().hasOnly(['color','icon','svg']) &&
+        data.collection.get('color', '#b0ed80') is string &&
+        data.collection.get('color', '#b0ed80').matches('#[0-9a-fA-F]{6}') &&
+        data.collection.get('icon', '📍') is string && data.collection.get('icon', '📍').size() <= 32 &&
+        (data.collection.get('svg', null) == null || data.collection.svg is string) &&
+        data.places is list && data.places.size() <= 200 && data.archived is bool &&
+        data.revision is int && data.updatedAt == request.time;
+    }
+    match /apps/my-places/resources/{resourceId} {
+      allow get: if verified() &&
+        (!exists(/databases/$(database)/documents/apps/my-places/resources/$(resourceId)) ||
+         resource.data.ownerId == request.auth.uid ||
+         (resource.data.archived == false && memberRole(resourceId) in ['read','edit']));
+      allow list: if verified() && resource.data.ownerId == request.auth.uid;
+      allow create: if verified() && request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.revision == 1 && validResource(request.resource.data);
+      allow update: if verified() && validResource(request.resource.data) &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.sourceId == resource.data.sourceId &&
+        request.resource.data.revision == resource.data.revision + 1 &&
+        (resource.data.ownerId == request.auth.uid ||
+         (memberRole(resourceId) == 'edit' && resource.data.sourceId.matches('collection:.*') &&
+          resource.data.archived == false && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['title','collection','places','revision','updatedAt'])));
+      allow delete: if false;
+      match /members/{memberId} {
+        allow get: if verified() && (request.auth.uid == memberId || ownsResource(resourceId));
+        allow list: if verified() && ownsResource(resourceId);
+        allow create, update: if verified() && ownsResource(resourceId) &&
+          request.resource.data.keys().hasOnly(['ownerId','recipientId','recipientEmail','role']) &&
+          request.resource.data.ownerId == request.auth.uid &&
+          request.resource.data.recipientId == memberId && memberId != request.auth.uid &&
+          request.resource.data.recipientEmail is string &&
+          request.resource.data.role in ['read','edit'] &&
+          (request.resource.data.role == 'read' || get(/databases/$(database)/documents/apps/my-places/resources/$(resourceId)).data.sourceId.matches('collection:.*'));
+        allow delete: if verified() && ownsResource(resourceId);
+      }
+    }
     match /apps/my-places/shares/{shareId} {
-      allow read: if request.auth != null &&
-        (resource.data.ownerId == request.auth.uid || resource.data.get('recipientId','') == request.auth.uid || (request.auth.token.email_verified == true && resource.data.get('recipientEmail','') == request.auth.token.email.lower()));
-      allow create: if request.auth != null &&
-        request.resource.data.keys().hasOnly(['ownerId','recipientEmail','title','places','createdAt','sourceId','collection']) &&
-        request.resource.data.ownerId == request.auth.uid &&
-        request.resource.data.recipientEmail is string &&
-        request.auth.token.email_verified == true &&
-        request.resource.data.recipientEmail == request.resource.data.recipientEmail.lower() &&
-        request.resource.data.recipientEmail != request.auth.token.email.lower() &&
-        (!('collection' in request.resource.data) || request.resource.data.collection is map) &&
-        request.resource.data.sourceId is string && request.resource.data.sourceId.size() <= 200 &&
-        request.resource.data.title is string && request.resource.data.places is list &&
-        request.resource.data.places.size() <= 200 &&
-        request.resource.data.createdAt == request.time;
-      allow delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
-      allow update: if request.auth != null && resource.data.ownerId == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['createdAt']) &&
-        request.resource.data.createdAt == request.time;
+      allow read: if signedIn() &&
+        (resource.data.ownerId == request.auth.uid || resource.data.get('recipientId','') == request.auth.uid ||
+         (verified() && resource.data.get('recipientEmail','') == request.auth.token.email.lower()));
+      function validGrant() {
+        let data = request.resource.data;
+        return verified() && data.keys().hasOnly(['ownerId','recipientId','recipientEmail','resourceId','sourceId','role','title','places','createdAt']) &&
+          data.ownerId == request.auth.uid && data.recipientId is string &&
+          data.recipientId != request.auth.uid && data.recipientEmail is string &&
+          data.recipientEmail == data.recipientEmail.lower() &&
+          data.recipientEmail != request.auth.token.email.lower() &&
+          data.resourceId is string && data.sourceId is string &&
+          data.role in ['read','edit'] && data.title is string && data.places == [] &&
+          data.createdAt == request.time && ownsResource(data.resourceId) &&
+          get(/databases/$(database)/documents/apps/my-places/resources/$(data.resourceId)).data.archived == false &&
+          data.sourceId == get(/databases/$(database)/documents/apps/my-places/resources/$(data.resourceId)).data.sourceId &&
+          getAfter(/databases/$(database)/documents/apps/my-places/resources/$(data.resourceId)/members/$(data.recipientId)).data.role == data.role;
+      }
+      allow create: if validGrant();
+      allow update: if signedIn() && resource.data.ownerId == request.auth.uid && validGrant() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role','title','createdAt']);
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
     }
   }
 }
