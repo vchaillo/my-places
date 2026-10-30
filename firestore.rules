@@ -6,12 +6,14 @@ service cloud.firestore {
     }
     match /apps/my-places/shares/{shareId} {
       allow read: if request.auth != null &&
-        (resource.data.ownerId == request.auth.uid || resource.data.recipientId == request.auth.uid);
+        (resource.data.ownerId == request.auth.uid || resource.data.get('recipientId','') == request.auth.uid || (request.auth.token.email_verified == true && resource.data.get('recipientEmail','') == request.auth.token.email.lower()));
       allow create: if request.auth != null &&
-        request.resource.data.keys().hasOnly(['ownerId','recipientId','title','places','createdAt']) &&
+        request.resource.data.keys().hasOnly(['ownerId','recipientEmail','title','places','createdAt']) &&
         request.resource.data.ownerId == request.auth.uid &&
-        request.resource.data.recipientId is string &&
-        request.resource.data.recipientId != request.auth.uid &&
+        request.resource.data.recipientEmail is string &&
+        request.auth.token.email_verified == true &&
+        request.resource.data.recipientEmail == request.resource.data.recipientEmail.lower() &&
+        request.resource.data.recipientEmail != request.auth.token.email.lower() &&
         request.resource.data.title is string && request.resource.data.places is list &&
         request.resource.data.places.size() <= 200 &&
         request.resource.data.createdAt == request.time;
