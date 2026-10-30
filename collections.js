@@ -1,7 +1,7 @@
-import {renameMembership} from './data.js?v=20261030-details';
-import {enableSorting,dragIcon} from './sorting.js?v=20261030-details';
-import {categorySVG,iconPaths} from './customize.js?v=20261030-details';
-import {protectDialog,symbolPicker} from './ui.js?v=20261030-details';
+import {renameMembership} from './data.js?v=20261030-organize';
+import {enableSorting,dragIcon} from './sorting.js?v=20261030-organize';
+import {categorySVG,iconPaths} from './customize.js?v=20261030-organize';
+import {protectDialog,symbolPicker} from './ui.js?v=20261030-organize';
 export function setupCollections({getState,save,render,notify,penIcon}){
  const panel=document.getElementById('panel');let dragged=null,editing=null;
  const dialog=protectDialog(document.createElement('dialog'));dialog.innerHTML='<form><div class="dialoghead"><h2>Nouvelle collection</h2><button type="button" aria-label="Fermer" class="close-collection">✕</button></div><div class="collection-name-row"><label>Nom<input name="title" required maxlength="50" placeholder="Week-ends, bonnes tables…"></label><label>Emoji<input name="emoji" value="📍" maxlength="16" readonly aria-label="Choisir un emoji"></label></div><label class="color-choice">Couleur de la collection<input name="color" type="color" value="#b0ed80"></label><div class="actions"><button type="button" class="danger delete-collection">Supprimer</button><button class="primary">Enregistrer</button></div></form>';document.body.append(dialog);const form=dialog.querySelector('form');symbolPicker(form);

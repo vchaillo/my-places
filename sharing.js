@@ -1,4 +1,4 @@
-import {userAvatar} from './place-ui.js?v=20261030-details';
+import {userAvatar} from './place-ui.js?v=20261030-organize';
 // A share dialog lists existing grants and only accepts registered accounts.
 export function setupSharing({cloud,notify}){
  const $=id=>document.getElementById(id),dialog=$('shareDialog'),input=$('recipient'),send=$('sendShare');

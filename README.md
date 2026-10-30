@@ -55,3 +55,11 @@ Run adapter and data-model checks with `node --test tests/*.test.mjs`. Publish t
 Selecting a sidebar place centers its marker and opens the map popup without entering edit mode. Collection symbols appear in sidebar cards, place cards, and map popups. The directions menu uses HTTPS links for Google Maps, Apple Maps, and Waze; the device decides whether to open the installed app or the web page. No location is requested: the selected navigation app chooses the departure point.
 
 The sharing dialog displays account avatars from the app directory, with an initial when no image is available. Publish the updated Firestore rules and reopen the app to register the optional Google photo URL.
+
+### Personal and received sections
+
+The Places tab separates owned places from received places. Received collections and places display the sender's directory email and avatar when available; unavailable profiles use a generic sender label. Profile lookups are cached per signed-in session. Received collections open their filtered Places list through "Voir les lieux".
+
+Map popup actions share one row: edit, directions, and share for owned places; copy, directions, and remove for received places. Directions retain the three navigation providers in an icon menu.
+
+The place editor uses a searchable, keyboard-operable collection multi-select with removable tokens and hidden form fields. Status controls appear underneath. Existing memberships and form-abandonment confirmation are preserved.

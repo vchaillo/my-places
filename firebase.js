@@ -15,6 +15,7 @@ export const cloud = {
     this.login = () => auth.signInWithPopup(authentication, new auth.GoogleAuthProvider());
     this.logout = () => auth.signOut(authentication);
     this.save = data => db.setDoc(db.doc(firestore, 'apps', 'my-places', 'users', this.user.uid), data);
+    const profileCache=new Map();this.getProfile=uid=>{if(!profileCache.has(uid))profileCache.set(uid,db.getDoc(db.doc(firestore,'apps','my-places','directory',uid)).then(snapshot=>snapshot.exists()?snapshot.data():null).catch(error=>{profileCache.delete(uid);throw error}));return profileCache.get(uid)};
     const shares=db.collection(firestore,'apps','my-places','shares');
     this.findUsers=async prefix=>{const result=await db.getDocs(db.query(db.collection(firestore,'apps','my-places','directory'),db.orderBy('email'),db.startAt(prefix),db.endAt(prefix+'\uf8ff'),db.limit(10)));return result.docs.map(doc=>doc.data())};
     this.listShares=async payload=>{const result=await db.getDocs(db.query(shares,db.where('ownerId','==',this.user.uid)));return result.docs.map(doc=>({id:doc.id,...doc.data()})).filter(item=>item.sourceId===payload.sourceId||(!item.sourceId&&item.title===payload.title&&((payload.sourceId.startsWith('place:')&&item.places?.length===1&&item.places[0].id===payload.places[0]?.id)||(payload.sourceId.startsWith('collection:')&&item.places?.every(p=>p.category===payload.title))))) };
@@ -27,7 +28,7 @@ export const cloud = {
     };
     let stopData = () => {}, stopInbox = () => {}, stopEmail = () => {};
     auth.onAuthStateChanged(authentication, user => {
-      stopData(); stopInbox(); stopEmail(); this.user = user; this.inbox = []; onInbox([]);
+      stopData(); stopInbox(); stopEmail(); profileCache.clear(); this.user = user; this.inbox = []; onInbox([]);
       if (!user) { onState(null, null); return; }
       if(user.emailVerified&&user.email)db.setDoc(db.doc(firestore,'apps','my-places','directory',user.uid),{email:user.email.toLowerCase(),photoURL:user.photoURL||''}).catch(()=>db.setDoc(db.doc(firestore,'apps','my-places','directory',user.uid),{email:user.email.toLowerCase()}).catch(()=>{}));
       // Never mix local guest data or demo fixtures into a signed-in account.
